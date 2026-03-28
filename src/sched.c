@@ -131,15 +131,108 @@ size_t read_data(size_t workload_size, FILE *file) {
 	return count;
 }
 
+/* comparator: sort indices by priority descending */
+static workload_item *g_workload;
+int cmp_prio_desc(const void *a, const void *b) {
+    size_t ia = *(const size_t *)a;
+    size_t ib = *(const size_t *)b;
+    return g_workload[ib].prio - g_workload[ia].prio;
+}
+
 /**
  * @brief main loop for simulation: describe actions taken at each
  * time step from time ts to tf. 
  */
-void time_loop(size_t workload_size, size_t ts, size_t tf, size_t ncpus, pstate **timeline) {
-
-    /* ... to be implemented **/
-
+void time_loop(size_t workload_size, size_t ts, size_t tf,
+               size_t ncpus, pstate **timeline) {
+ 
+    g_workload = workload;
+ 
+    size_t *current   = malloc(workload_size * sizeof(size_t));
+    size_t *runq_idx  = malloc(workload_size * sizeof(size_t));
+    size_t *pendq_idx = malloc(workload_size * sizeof(size_t));
+    process *run_procs  = malloc(workload_size * sizeof(process));
+    process *pend_procs = malloc(workload_size * sizeof(process));
+ 
+    /* 
+     * Step 0: pre-mark every process as 'pending' for all timesteps
+     * from 0 to END_STEP-1. The post-pass below will fix up 'inactive'
+     * for timesteps after a process truly finishes.
+     */
+    for (size_t i = 0; i < workload_size; i++)
+        for (size_t t = 0; t < (size_t)END_STEP; t++)
+            timeline[i][t] = pending;
+ 
+    for (size_t t = ts; t <= tf; t++) {
+ 
+        size_t n_current = 0, n_run = 0, n_pend = 0;
+ 
+        /* 1. Collect current processes: ts_i <= t <= tf_i */
+        for (size_t i = 0; i < workload_size; i++) {
+            if (workload[i].ts <= t && t <= workload[i].tf)
+                current[n_current++] = i;
+        }
+ 
+        /* 2. Sort by priority descending */
+        qsort(current, n_current, sizeof(size_t), cmp_prio_desc);
+ 
+        /* 3. Greedy fill run queue up to CPU_CAPABILITY */
+        int cpu_load = 0;
+        for (size_t k = 0; k < n_current; k++) {
+            size_t idx = current[k];
+            int p = workload[idx].prio;
+            if (cpu_load + p <= CPU_CAPABILITY) {
+                runq_idx[n_run++] = idx;
+                cpu_load += p;
+            } else {
+                pendq_idx[n_pend++] = idx;
+            }
+        }
+ 
+        /* 4. Penalise de-scheduled processes: idle++ and tf++ */
+        for (size_t k = 0; k < n_pend; k++) {
+            size_t idx = pendq_idx[k];
+            workload[idx].idle++;
+            workload[idx].tf++;
+        }
+ 
+        /* 5. Build process arrays for record_timeline */
+        for (size_t k = 0; k < n_run; k++) {
+            run_procs[k].pid  = (int)runq_idx[k];
+            run_procs[k].prio = workload[runq_idx[k]].prio;
+        }
+        for (size_t k = 0; k < n_pend; k++) {
+            pend_procs[k].pid  = (int)pendq_idx[k];
+            pend_procs[k].prio = workload[pendq_idx[k]].prio;
+        }
+ 
+        /* 6. Log this timestep */
+        printf("t=%zu | run:", t);
+        for (size_t k = 0; k < n_run; k++)
+            printf(" %zu(p=%d)", runq_idx[k], workload[runq_idx[k]].prio);
+        printf(" | pend:");
+        for (size_t k = 0; k < n_pend; k++)
+            printf(" %zu(p=%d)", pendq_idx[k], workload[pendq_idx[k]].prio);
+        printf(" | cpu_load=%d\n", cpu_load);
+ 
+        /* 7. Record running state in timeline (pending already set) */
+        for (size_t k = 0; k < n_run; k++)
+            timeline[runq_idx[k]][t] = running;
+    }
+ 
+    /*
+     * Step 8: post-pass — mark timesteps AFTER a process's final tf as inactive.
+     * The final tf is now stored in workload[i].tf after all the idle increments.
+     */
+    for (size_t i = 0; i < workload_size; i++) {
+        for (size_t t = workload[i].tf + 1; t < (size_t)END_STEP; t++)
+            timeline[i][t] = inactive;
+    }
+ 
+    free(current); free(runq_idx); free(pendq_idx);
+    free(run_procs); free(pend_procs);
 }
+ 
 
 /**
  * main
