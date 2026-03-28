@@ -1,122 +1,35 @@
 * Read from stdin ... 3 lines in data.
 * Loaded 3 lines of data.
-* starting scheduling on 1 CPUs
-[t=0]
-> schedule pid=0 prio=20 ('p0') ... added to running queue
-> CPU occupation: CPU[0]=20 
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=1]
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=2]
-> schedule pid=1 prio=1 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=0 prio=20 ('p0') has greater or equal priority
-> CPU occupation: CPU[0]=20 
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=3]
-> schedule pid=1 prio=1 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=0 prio=20 ('p0') has greater or equal priority
-> CPU occupation: CPU[0]=20 
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=4]
-> schedule pid=1 prio=1 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=0 prio=20 ('p0') has greater or equal priority
-> CPU occupation: CPU[0]=20 
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=5]
-> schedule pid=1 prio=1 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=0 prio=20 ('p0') has greater or equal priority
-> CPU occupation: CPU[0]=20 
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=6]
-> schedule pid=1 prio=1 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=0 prio=20 ('p0') has greater or equal priority
-> CPU occupation: CPU[0]=20 
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=7]
-> schedule pid=1 prio=1 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=0 prio=20 ('p0') has greater or equal priority
-> CPU occupation: CPU[0]=20 
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=8]
-> schedule pid=1 prio=1 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=0 prio=20 ('p0') has greater or equal priority
-> CPU occupation: CPU[0]=20 
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=9]
-> schedule pid=1 prio=1 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=0 prio=20 ('p0') has greater or equal priority
-> CPU occupation: CPU[0]=20 
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=10]
-> schedule pid=1 prio=1 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=0 prio=20 ('p0') has greater or equal priority
-> CPU occupation: CPU[0]=20 
-> running: [(20,0) ]
-> pending: [(1,1) ]
-[t=11]
-> process pid=0 prio=20 ('p0') finished after time t=10
-> CPU occupation: CPU[0]=0 
-> schedule pid=1 prio=1 ('p2') ... added to running queue
-> CPU occupation: CPU[0]=1 
-> running: [(1,1) ]
-> pending: []
-[t=12]
-> running: [(1,1) ]
-> pending: []
-[t=13]
-> running: [(1,1) ]
-> pending: []
-[t=14]
-> running: [(1,1) ]
-> pending: []
-[t=15]
-> running: [(1,1) ]
-> pending: []
-[t=16]
-> running: [(1,1) ]
-> pending: []
-[t=17]
-> running: [(1,1) ]
-> pending: []
-[t=18]
-> running: [(1,1) ]
-> pending: []
-[t=19]
-> running: [(1,1) ]
-> pending: []
-[t=20]
-> process pid=1 prio=1 ('p2') finished after time t=19
-> CPU occupation: CPU[0]=0 
-> running: []
-> pending: []
-[t=21]
-> running: []
-> pending: []
-[t=22]
-> running: []
-> pending: []
-[t=23]
-> running: []
-> pending: []
-[t=24]
-> running: []
-> pending: []
-[t=25]
-> running: []
-> pending: []
-[t=26]
-> running: []
-> pending: []
-[t=27]
-> running: []
-> pending: []
-[t=28]
-> running: []
-> pending: []
-[t=29]
-> running: []
-> pending: []
+t=0 | run: 0(p=20) | pend: | cpu_load=20
+t=1 | run: 0(p=20) | pend: | cpu_load=20
+t=2 | run: 0(p=20) | pend: 1(p=1) | cpu_load=20
+t=3 | run: 0(p=20) | pend: 1(p=1) | cpu_load=20
+t=4 | run: 0(p=20) | pend: 1(p=1) | cpu_load=20
+t=5 | run: 0(p=20) | pend: 1(p=1) | cpu_load=20
+t=6 | run: 0(p=20) | pend: 1(p=1) | cpu_load=20
+t=7 | run: 0(p=20) | pend: 1(p=1) | cpu_load=20
+t=8 | run: 0(p=20) | pend: 1(p=1) | cpu_load=20
+t=9 | run: 0(p=20) | pend: 1(p=1) | cpu_load=20
+t=10 | run: 0(p=20) | pend: 1(p=1) | cpu_load=20
+t=11 | run: 1(p=1) | pend: | cpu_load=1
+t=12 | run: 1(p=1) | pend: | cpu_load=1
+t=13 | run: 1(p=1) | pend: | cpu_load=1
+t=14 | run: 1(p=1) | pend: | cpu_load=1
+t=15 | run: 1(p=1) | pend: | cpu_load=1
+t=16 | run: 1(p=1) | pend: | cpu_load=1
+t=17 | run: 1(p=1) | pend: | cpu_load=1
+t=18 | run: 1(p=1) | pend: | cpu_load=1
+t=19 | run: 1(p=1) | pend: | cpu_load=1
+t=20 | run: | pend: | cpu_load=0
+t=21 | run: | pend: | cpu_load=0
+t=22 | run: | pend: | cpu_load=0
+t=23 | run: | pend: | cpu_load=0
+t=24 | run: | pend: | cpu_load=0
+t=25 | run: | pend: | cpu_load=0
+t=26 | run: | pend: | cpu_load=0
+t=27 | run: | pend: | cpu_load=0
+t=28 | run: | pend: | cpu_load=0
+t=29 | run: | pend: | cpu_load=0
 * Chronogram === 
 	|....|....|....|....|....|...
 p0	XXXXXXXXXX			 (tf=10,idle=0)
