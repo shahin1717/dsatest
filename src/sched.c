@@ -9,7 +9,7 @@
 #include "process.h"
 #include "cpu.h"
 
-#define END_STEP 30
+#define END_STEP 29
 #define MAX_SIM  500
 
 
@@ -133,145 +133,192 @@ size_t read_data(size_t workload_size, FILE *file) {
 	}
 	return count;
 }
-/* -------------------------------------------------- */
-/* Comparator: sort by priority desc, then by         */
-/* last_run asc (ran longest ago = higher priority)   */
-/* -------------------------------------------------- */
-static workload_item *g_workload;
-static size_t *g_last_run; /* g_last_run[i] = last timestep process i ran, or -1 */
+/* --- Run queue --- */
+static size_t runq[256]; static size_t rq_sz=0; static int cpu_load=0;
  
-int cmp_prio_desc(const void *a, const void *b) {
-    size_t ia = *(const size_t *)a;
-    size_t ib = *(const size_t *)b;
-    int pa = g_workload[ia].prio;
-    int pb = g_workload[ib].prio;
-    if (pb != pa) return pb - pa; /* higher prio first */
-    /* tie-break: the one that ran LESS recently goes first */
-    /* g_last_run == SIZE_MAX means never ran -> highest priority in tie */
-    if (g_last_run[ia] < g_last_run[ib]) return -1; /* ia ran earlier, goes first */
-    if (g_last_run[ia] > g_last_run[ib]) return  1;
-    return 0;
+static int min_runner(void) { /* returns index of lowest prio in runq, or -1 */
+    if(!rq_sz) return -1;
+    int m=0;
+    for(size_t i=1;i<rq_sz;i++) {
+        int pi=workload[runq[i]].prio, pm=workload[runq[m]].prio;
+        if(pi < pm) m=i;
+        else if(pi == pm && runq[i] > runq[m]) m=i; /* tie: evict higher pid */
+    }
+    return m;
+}
+static void rem_runner(int idx) {
+    cpu_load-=workload[runq[idx]].prio;
+    runq[idx]=runq[--rq_sz];
+}
+static void add_runner(size_t pid) { runq[rq_sz++]=pid; cpu_load+=workload[pid].prio; }
+ 
+static int cmp_pd(const void *a,const void *b) {
+    size_t ia=*(size_t*)a,ib=*(size_t*)b;
+    int d=workload[ib].prio-workload[ia].prio;
+    if(d) return d;
+    return (int)ib-(int)ia; /* tie: higher pid first */
 }
  
-/* -------------------------------------------------- */
-/*  time_loop                                         */
-/* -------------------------------------------------- */
-void time_loop(size_t workload_size, size_t ts, size_t tf,
-               size_t ncpus, pstate **timeline) {
+/* --- Pending queue as a set (no duplicates) --- */
+static size_t pq[512]; static size_t pq_sz=0;
  
-    g_workload = workload;
-    g_last_run = malloc(workload_size * sizeof(size_t));
-    for (size_t i = 0; i < workload_size; i++)
-        g_last_run[i] = SIZE_MAX; /* never ran */
+static bool pq_contains(size_t pid) {
+    for(size_t i=0;i<pq_sz;i++) if(pq[i]==pid) return true;
+    return false;
+}
+static void pq_add(size_t pid) {
+    if(!pq_contains(pid)) pq[pq_sz++]=pid;
+}
+static void pq_remove_at(size_t idx) { pq[idx]=pq[--pq_sz]; }
  
-    size_t *current   = malloc(workload_size * sizeof(size_t));
-    size_t *runq_idx  = malloc(workload_size * sizeof(size_t));
-    size_t *pendq_idx = malloc(workload_size * sizeof(size_t));
-    process *run_procs  = malloc(workload_size * sizeof(process));
-    process *pend_procs = malloc(workload_size * sizeof(process));
+/*
+ * try_schedule: attempt to put pid into run queue.
+ * While it doesn't fit, evict the lowest-prio runner (if new prio > runner prio).
+ * Evicted pids are added to pq (pending set) directly.
+ * Returns true if pid was added to run queue.
+ */
+static bool try_schedule(size_t pid) {
+    int p=workload[pid].prio;
+    printf("> schedule pid=%zu prio=%d ('%s') ",pid,p,workload[pid].cmd);
+    while(cpu_load+p > CPU_CAPABILITY) {
+        int m=min_runner();
+        if(m<0 || workload[runq[m]].prio >= p) {
+            if(m>=0)
+                printf("...can't fit. Pick process to put asleep: None, as min prio: pid=%zu prio=%d ('%s') has greater or equal priority\n",
+                    runq[m],workload[runq[m]].prio,workload[runq[m]].cmd);
+            printf("> CPU occupation: CPU[0]=%d \n",cpu_load);
+            return false;
+        }
+        size_t ep=runq[m];
+        printf("...can't fit. Pick process to put asleep: pid=%zu prio=%d ('%s')\n",
+            ep,workload[ep].prio,workload[ep].cmd);
+        rem_runner(m);
+        printf("> CPU occupation: CPU[0]=%d \n",cpu_load);
+        pq_add(ep); /* evicted -> pending (will be processed next round) */
+    }
+    add_runner(pid);
+    printf(" added to running queue\n");
+    printf("> CPU occupation: CPU[0]=%d \n",cpu_load);
+    return true;
+}
  
-    /* Pre-mark every cell as pending */
-    for (size_t i = 0; i < workload_size; i++)
-        for (size_t t = 0; t < (size_t)END_STEP; t++)
-            timeline[i][t] = pending;
+void time_loop(size_t ws, pstate **tl) {
+    rq_sz=0; cpu_load=0; pq_sz=0;
  
-    for (size_t t = ts; t <= tf; t++) {
+    for(size_t i=0;i<ws;i++)
+        for(size_t t=0;t<END_STEP;t++)
+            tl[i][t]=pending;
  
-        size_t n_current = 0, n_run = 0, n_pend = 0;
+    for(size_t t=0;t<MAX_SIM;t++) {
+        /* stop when nothing left */
+        int alive=0;
+        for(size_t i=0;i<ws;i++) if(t<=workload[i].tf){alive=1;break;}
+        if(!alive) break;
  
-        /* 1. Collect current processes: ts_i <= t <= tf_i */
-        for (size_t i = 0; i < workload_size; i++)
-            if (workload[i].ts <= t && t <= workload[i].tf)
-                current[n_current++] = i;
+        printf("[t=%zu]\n",t);
  
-        /* 2. Sort: priority desc, tie-break by least-recently-run first */
-        qsort(current, n_current, sizeof(size_t), cmp_prio_desc);
- 
-        /* 3. Greedy fill run queue up to CPU_CAPABILITY */
-        int cpu_load = 0;
-        for (size_t k = 0; k < n_current; k++) {
-            size_t idx = current[k];
-            int p = workload[idx].prio;
-            if (cpu_load + p <= CPU_CAPABILITY) {
-                runq_idx[n_run++] = idx;
-                cpu_load += p;
-            } else {
-                pendq_idx[n_pend++] = idx;
+        /* 1. Remove finished processes */
+        for(int i=(int)rq_sz-1;i>=0;i--) {
+            size_t pid=runq[i];
+            if(workload[pid].tf < t) {
+                printf("> process pid=%zu prio=%d ('%s') finished after time t=%zu\n",
+                    pid,workload[pid].prio,workload[pid].cmd,workload[pid].tf);
+                rem_runner(i);
+                printf("> CPU occupation: CPU[0]=%d \n",cpu_load);
             }
         }
  
-        /* 4. Penalise de-scheduled processes */
-        for (size_t k = 0; k < n_pend; k++) {
-            workload[pendq_idx[k]].idle++;
-            workload[pendq_idx[k]].tf++;
+        /* 2. Take snapshot of pending queue BEFORE processing new arrivals.
+              Step 3 will only retry these pids (not ones evicted during step 2). */
+        size_t snap[512]; size_t snap_sz=pq_sz;
+        for(size_t k=0;k<pq_sz;k++) snap[k]=pq[k];
+        qsort(snap,snap_sz,sizeof(size_t),cmp_pd);
+ 
+        /* Schedule NEW arrivals (ts==t), sorted prio desc.
+           Evicted go to pq but are NOT retried this round (not in snapshot). */
+        size_t newp[256]; size_t nn=0;
+        for(size_t i=0;i<ws;i++) if(workload[i].ts==t) newp[nn++]=i;
+        qsort(newp,nn,sizeof(size_t),cmp_pd);
+        for(size_t k=0;k<nn;k++) {
+            bool ok=try_schedule(newp[k]);
+            if(!ok) pq_add(newp[k]);
         }
  
-        /* 5. Update last_run for running processes */
-        for (size_t k = 0; k < n_run; k++)
-            g_last_run[runq_idx[k]] = t;
+        /* 3. Schedule EXISTING pending (snapshot from before step 2).
+              Evicted during this phase also skip this loop. */
  
-        /* 6. Log */
-        printf("t=%zu | run:", t);
-        for (size_t k = 0; k < n_run; k++)
-            printf(" %zu(p=%d)", runq_idx[k], workload[runq_idx[k]].prio);
-        printf(" | pend:");
-        for (size_t k = 0; k < n_pend; k++)
-            printf(" %zu(p=%d)", pendq_idx[k], workload[pendq_idx[k]].prio);
-        printf(" | cpu_load=%d\n", cpu_load);
+        for(size_t k=0;k<snap_sz;k++) {
+            size_t pid=snap[k];
+            /* skip if no longer in pq (could have been evicted out and re-added,
+               but with set semantics it's fine - just check it's still current) */
+            if(!pq_contains(pid)) continue;
+            if(workload[pid].ts>t || workload[pid].tf<t) continue;
+            /* remove from pq before trying */
+            for(size_t j=0;j<pq_sz;j++) {
+                if(pq[j]==pid) { pq_remove_at(j); break; }
+            }
+            bool ok=try_schedule(pid);
+            if(!ok) pq_add(pid); /* back to pq if failed */
+            /* if ok: evicted ones were added to pq inside try_schedule */
+        }
  
-        /* 7. Record running state */
-        for (size_t k = 0; k < n_run; k++)
-            timeline[runq_idx[k]][t] = running;
+        /* 4. Idle penalty */
+        for(size_t k=0;k<pq_sz;k++) {
+            size_t pid=pq[k];
+            if(workload[pid].ts<=t && t<=workload[pid].tf) {
+                workload[pid].idle++; workload[pid].tf++;
+            }
+        }
+ 
+        /* 5. Print queues */
+        size_t disp[256];
+        for(size_t i=0;i<rq_sz;i++) disp[i]=runq[i];
+        qsort(disp,rq_sz,sizeof(size_t),cmp_pd);
+        printf("> running: [");
+        for(size_t i=0;i<rq_sz;i++) printf("(%d,%zu) ",workload[disp[i]].prio,disp[i]);
+        printf("]\n> pending: [");
+        /* sort pq for display */
+        size_t pdisp[512];
+        for(size_t i=0;i<pq_sz;i++) pdisp[i]=pq[i];
+        qsort(pdisp,pq_sz,sizeof(size_t),cmp_pd);
+        for(size_t k=0;k<pq_sz;k++) printf("(%d,%zu) ",workload[pdisp[k]].prio,pdisp[k]);
+        printf("]\n");
+ 
+        /* 6. Record timeline */
+        if(t<END_STEP)
+            for(size_t i=0;i<rq_sz;i++) tl[runq[i]][t]=running;
     }
  
-    /* Post-pass: mark inactive after final tf */
-    for (size_t i = 0; i < workload_size; i++)
-        for (size_t t = workload[i].tf + 1; t < (size_t)END_STEP; t++)
-            timeline[i][t] = inactive;
- 
-    free(g_last_run);
-    free(current); free(runq_idx); free(pendq_idx);
-    free(run_procs); free(pend_procs);
+    /* post-pass: inactive after final tf */
+    for(size_t i=0;i<ws;i++) {
+        size_t end=workload[i].tf+1;
+        if(end>END_STEP) end=END_STEP;
+        for(size_t t=end;t<END_STEP;t++) tl[i][t]=inactive;
+    }
 }
  
-
-/**
- * main
- */
-int main(int argc, char** argv) {
-	FILE *input;
-	if (argc > 1) { // if one arg, use it to read in data 
-		if ((input = fopen(argv[1],"r")) == NULL) {
-			perror("Error reading file:");
-			exit(EXIT_FAILURE);
-		}
-		else
-			printf("* Read from %s ...", argv[1]);
-	}
-	else { // no arg provided, read from stdin
-			printf("* Read from stdin ...");
-			input = stdin;
-	}
-	// read from standard input
-	fflush(stdout);
-	size_t nr = count_lines_in_file(input);
-
-	printf(" %zu lines in data.\n", nr);
-
-	workload = malloc(sizeof(workload_item) * nr);
-	size_t workload_size = read_data(nr, input);
-	printf("* Loaded %zu lines of data.\n", nr);
-	pstate **timeline = alloc_timeline(END_STEP, workload_size);
-
-	if (nr > 0) 
-		time_loop(workload_size, 0, END_STEP-1, MAX_CPU, timeline);
-	else
-		return EXIT_FAILURE;
-
-
-	printf("* Chronogram === \n");
-	chronogram(workload, workload_size, END_STEP-1);
-	print_timeline(END_STEP-1, workload_size, timeline);
-	free(workload);
-	return 0;
+int main(int argc, char **argv) {
+    FILE *input;
+    if(argc>1) {
+        if((input=fopen(argv[1],"r"))==NULL){perror("Error:");exit(EXIT_FAILURE);}
+        printf("* Read from %s ...",argv[1]);
+    } else { printf("* Read from stdin ..."); input=stdin; }
+    fflush(stdout);
+    size_t nr=count_lines_in_file(input);
+    printf(" %zu lines in data.\n",nr);
+    workload=malloc(sizeof(workload_item)*nr);
+    size_t ws=read_data(nr,input);
+    if(input!=stdin) fclose(input);
+    printf("* Loaded %zu lines of data.\n",ws);
+    printf("* starting scheduling on 1 CPUs\n");
+    pstate **tl=alloc_timeline(END_STEP,ws);
+    if(ws>0) time_loop(ws,tl);
+    else { free(workload); return EXIT_FAILURE; }
+    printf("* Chronogram === \n");
+    chronogram(workload,ws,END_STEP);
+    print_timeline(END_STEP,ws,tl);
+    free_timeline(ws,tl);
+    for(size_t i=0;i<ws;i++) free(workload[i].cmd);
+    free(workload);
+    return 0;
 }
