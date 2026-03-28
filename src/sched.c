@@ -3,13 +3,14 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <limits.h>
 #include "sched.h"
 #include "trace.h"
 #include "process.h"
 #include "cpu.h"
 
 #define END_STEP 30
-
+#define MAX_SIM  500
 
 
 struct workload_item_t {
