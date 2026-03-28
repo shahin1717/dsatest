@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include "sched.h"
 #include "trace.h"
 #include "process.h"
@@ -130,23 +132,36 @@ size_t read_data(size_t workload_size, FILE *file) {
 	}
 	return count;
 }
-
-/* comparator: sort indices by priority descending */
+/* -------------------------------------------------- */
+/* Comparator: sort by priority desc, then by         */
+/* last_run asc (ran longest ago = higher priority)   */
+/* -------------------------------------------------- */
 static workload_item *g_workload;
+static size_t *g_last_run; /* g_last_run[i] = last timestep process i ran, or -1 */
+ 
 int cmp_prio_desc(const void *a, const void *b) {
     size_t ia = *(const size_t *)a;
     size_t ib = *(const size_t *)b;
-    return g_workload[ib].prio - g_workload[ia].prio;
+    int pa = g_workload[ia].prio;
+    int pb = g_workload[ib].prio;
+    if (pb != pa) return pb - pa; /* higher prio first */
+    /* tie-break: the one that ran LESS recently goes first */
+    /* g_last_run == SIZE_MAX means never ran -> highest priority in tie */
+    if (g_last_run[ia] < g_last_run[ib]) return -1; /* ia ran earlier, goes first */
+    if (g_last_run[ia] > g_last_run[ib]) return  1;
+    return 0;
 }
-
-/**
- * @brief main loop for simulation: describe actions taken at each
- * time step from time ts to tf. 
- */
+ 
+/* -------------------------------------------------- */
+/*  time_loop                                         */
+/* -------------------------------------------------- */
 void time_loop(size_t workload_size, size_t ts, size_t tf,
                size_t ncpus, pstate **timeline) {
  
     g_workload = workload;
+    g_last_run = malloc(workload_size * sizeof(size_t));
+    for (size_t i = 0; i < workload_size; i++)
+        g_last_run[i] = SIZE_MAX; /* never ran */
  
     size_t *current   = malloc(workload_size * sizeof(size_t));
     size_t *runq_idx  = malloc(workload_size * sizeof(size_t));
@@ -154,11 +169,7 @@ void time_loop(size_t workload_size, size_t ts, size_t tf,
     process *run_procs  = malloc(workload_size * sizeof(process));
     process *pend_procs = malloc(workload_size * sizeof(process));
  
-    /* 
-     * Step 0: pre-mark every process as 'pending' for all timesteps
-     * from 0 to END_STEP-1. The post-pass below will fix up 'inactive'
-     * for timesteps after a process truly finishes.
-     */
+    /* Pre-mark every cell as pending */
     for (size_t i = 0; i < workload_size; i++)
         for (size_t t = 0; t < (size_t)END_STEP; t++)
             timeline[i][t] = pending;
@@ -168,12 +179,11 @@ void time_loop(size_t workload_size, size_t ts, size_t tf,
         size_t n_current = 0, n_run = 0, n_pend = 0;
  
         /* 1. Collect current processes: ts_i <= t <= tf_i */
-        for (size_t i = 0; i < workload_size; i++) {
+        for (size_t i = 0; i < workload_size; i++)
             if (workload[i].ts <= t && t <= workload[i].tf)
                 current[n_current++] = i;
-        }
  
-        /* 2. Sort by priority descending */
+        /* 2. Sort: priority desc, tie-break by least-recently-run first */
         qsort(current, n_current, sizeof(size_t), cmp_prio_desc);
  
         /* 3. Greedy fill run queue up to CPU_CAPABILITY */
@@ -189,24 +199,17 @@ void time_loop(size_t workload_size, size_t ts, size_t tf,
             }
         }
  
-        /* 4. Penalise de-scheduled processes: idle++ and tf++ */
+        /* 4. Penalise de-scheduled processes */
         for (size_t k = 0; k < n_pend; k++) {
-            size_t idx = pendq_idx[k];
-            workload[idx].idle++;
-            workload[idx].tf++;
+            workload[pendq_idx[k]].idle++;
+            workload[pendq_idx[k]].tf++;
         }
  
-        /* 5. Build process arrays for record_timeline */
-        for (size_t k = 0; k < n_run; k++) {
-            run_procs[k].pid  = (int)runq_idx[k];
-            run_procs[k].prio = workload[runq_idx[k]].prio;
-        }
-        for (size_t k = 0; k < n_pend; k++) {
-            pend_procs[k].pid  = (int)pendq_idx[k];
-            pend_procs[k].prio = workload[pendq_idx[k]].prio;
-        }
+        /* 5. Update last_run for running processes */
+        for (size_t k = 0; k < n_run; k++)
+            g_last_run[runq_idx[k]] = t;
  
-        /* 6. Log this timestep */
+        /* 6. Log */
         printf("t=%zu | run:", t);
         for (size_t k = 0; k < n_run; k++)
             printf(" %zu(p=%d)", runq_idx[k], workload[runq_idx[k]].prio);
@@ -215,20 +218,17 @@ void time_loop(size_t workload_size, size_t ts, size_t tf,
             printf(" %zu(p=%d)", pendq_idx[k], workload[pendq_idx[k]].prio);
         printf(" | cpu_load=%d\n", cpu_load);
  
-        /* 7. Record running state in timeline (pending already set) */
+        /* 7. Record running state */
         for (size_t k = 0; k < n_run; k++)
             timeline[runq_idx[k]][t] = running;
     }
  
-    /*
-     * Step 8: post-pass — mark timesteps AFTER a process's final tf as inactive.
-     * The final tf is now stored in workload[i].tf after all the idle increments.
-     */
-    for (size_t i = 0; i < workload_size; i++) {
+    /* Post-pass: mark inactive after final tf */
+    for (size_t i = 0; i < workload_size; i++)
         for (size_t t = workload[i].tf + 1; t < (size_t)END_STEP; t++)
             timeline[i][t] = inactive;
-    }
  
+    free(g_last_run);
     free(current); free(runq_idx); free(pendq_idx);
     free(run_procs); free(pend_procs);
 }

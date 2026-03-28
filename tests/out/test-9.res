@@ -1,6 +1,6 @@
 [===Results===]
-0	RRRRRRRRRRRR.RRR_____________
-1	..RRRRRRRRRR..........RRRR___
+0	RRRRRRRRRRRR.R.R......R______
+1	..RRRRRRRRRR..R.......RRR____
 2	............R........RRR_____
 3	.............RRR_____________
 4	................RRRRR________
