@@ -33,7 +33,7 @@
  added to running queue
 > CPU occupation: CPU[0]=16 
 > running: [(10,3) (6,1) ]
-> pending: [(5,0) (4,2) ]
+> pending: [(4,2) (5,0) ]
 [t=7]
 > schedule pid=0 prio=5 ('p0') ...can't fit. Pick process to put asleep: None, as min prio: pid=1 prio=6 ('p1') has greater or equal priority
 > CPU occupation: CPU[0]=16 
@@ -47,7 +47,7 @@
 ...can't fit. Pick process to put asleep: None, as min prio: pid=1 prio=6 ('p1') has greater or equal priority
 > CPU occupation: CPU[0]=16 
 > running: [(10,3) (6,1) ]
-> pending: [(5,0) (4,2) ]
+> pending: [(4,2) (5,0) ]
 [t=9]
 > schedule pid=0 prio=5 ('p0') ...can't fit. Pick process to put asleep: None, as min prio: pid=1 prio=6 ('p1') has greater or equal priority
 > CPU occupation: CPU[0]=16 
@@ -61,7 +61,7 @@
 ...can't fit. Pick process to put asleep: None, as min prio: pid=1 prio=6 ('p1') has greater or equal priority
 > CPU occupation: CPU[0]=16 
 > running: [(10,3) (6,1) ]
-> pending: [(5,0) (4,2) ]
+> pending: [(4,2) (5,0) ]
 [t=11]
 > schedule pid=0 prio=5 ('p0') ...can't fit. Pick process to put asleep: None, as min prio: pid=1 prio=6 ('p1') has greater or equal priority
 > CPU occupation: CPU[0]=16 
@@ -75,7 +75,7 @@
 ...can't fit. Pick process to put asleep: None, as min prio: pid=1 prio=6 ('p1') has greater or equal priority
 > CPU occupation: CPU[0]=16 
 > running: [(10,3) (6,1) ]
-> pending: [(5,0) (4,2) ]
+> pending: [(4,2) (5,0) ]
 [t=13]
 > process pid=1 prio=6 ('p1') finished after time t=12
 > CPU occupation: CPU[0]=10 

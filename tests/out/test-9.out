@@ -66,24 +66,24 @@
 > running: [(15,3) (5,1) ]
 > pending: [(10,5) (8,2) (5,0) ]
 [t=14]
-> schedule pid=4 prio=10 ('p4') ...can't fit. Pick process to put asleep: pid=1 prio=5 ('p1')
+> schedule pid=5 prio=10 ('p5') ...can't fit. Pick process to put asleep: pid=1 prio=5 ('p1')
 > CPU occupation: CPU[0]=15 
 ...can't fit. Pick process to put asleep: None, as min prio: pid=3 prio=15 ('p3') has greater or equal priority
 > CPU occupation: CPU[0]=15 
-> schedule pid=5 prio=10 ('p5') ...can't fit. Pick process to put asleep: None, as min prio: pid=3 prio=15 ('p3') has greater or equal priority
+> schedule pid=4 prio=10 ('p4') ...can't fit. Pick process to put asleep: None, as min prio: pid=3 prio=15 ('p3') has greater or equal priority
 > CPU occupation: CPU[0]=15 
 > schedule pid=2 prio=8 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=3 prio=15 ('p3') has greater or equal priority
 > CPU occupation: CPU[0]=15 
 > schedule pid=0 prio=5 ('p0')  added to running queue
 > CPU occupation: CPU[0]=20 
 > running: [(15,3) (5,0) ]
-> pending: [(10,5) (10,4) (8,2) (5,1) ]
+> pending: [(8,2) (10,4) (5,1) (10,5) ]
 [t=15]
-> schedule pid=5 prio=10 ('p5') ...can't fit. Pick process to put asleep: pid=0 prio=5 ('p0')
+> schedule pid=4 prio=10 ('p4') ...can't fit. Pick process to put asleep: pid=0 prio=5 ('p0')
 > CPU occupation: CPU[0]=15 
 ...can't fit. Pick process to put asleep: None, as min prio: pid=3 prio=15 ('p3') has greater or equal priority
 > CPU occupation: CPU[0]=15 
-> schedule pid=4 prio=10 ('p4') ...can't fit. Pick process to put asleep: None, as min prio: pid=3 prio=15 ('p3') has greater or equal priority
+> schedule pid=5 prio=10 ('p5') ...can't fit. Pick process to put asleep: None, as min prio: pid=3 prio=15 ('p3') has greater or equal priority
 > CPU occupation: CPU[0]=15 
 > schedule pid=2 prio=8 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=3 prio=15 ('p3') has greater or equal priority
 > CPU occupation: CPU[0]=15 
@@ -114,7 +114,7 @@
 > schedule pid=0 prio=5 ('p0') ...can't fit. Pick process to put asleep: None, as min prio: pid=5 prio=10 ('p5') has greater or equal priority
 > CPU occupation: CPU[0]=20 
 > running: [(10,5) (10,4) ]
-> pending: [(8,2) (5,1) (5,0) ]
+> pending: [(5,1) (8,2) (5,0) ]
 [t=18]
 > schedule pid=2 prio=8 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=5 prio=10 ('p5') has greater or equal priority
 > CPU occupation: CPU[0]=20 
@@ -132,7 +132,7 @@
 > schedule pid=0 prio=5 ('p0') ...can't fit. Pick process to put asleep: None, as min prio: pid=5 prio=10 ('p5') has greater or equal priority
 > CPU occupation: CPU[0]=20 
 > running: [(10,5) (10,4) ]
-> pending: [(8,2) (5,1) (5,0) ]
+> pending: [(5,1) (8,2) (5,0) ]
 [t=20]
 > schedule pid=2 prio=8 ('p2') ...can't fit. Pick process to put asleep: None, as min prio: pid=5 prio=10 ('p5') has greater or equal priority
 > CPU occupation: CPU[0]=20 
