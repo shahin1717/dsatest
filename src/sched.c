@@ -153,14 +153,14 @@ static bool try_schedule(size_t pid) {
  *     (evicted processes go to pq but are NOT in this round's list)
  *  5. Idle penalty
  * ================================================================ */
-void time_loop(size_t ws, pstate **tl) {
+void time_loop(size_t ws, size_t ts, size_t tf, size_t ncpus, pstate **tl) {
     rq_sz=0; cpu_load=0; pq_sz=0;
 
     for(size_t i=0;i<ws;i++)
         for(size_t t=0;t<END_STEP;t++)
             tl[i][t]=pending;
 
-    for(size_t t=0; t<MAX_SIM; t++) {
+    for(size_t t=ts; t<MAX_SIM; t++) {
         int alive=0;
         for(size_t i=0;i<ws;i++) if(t<=workload[i].tf){alive=1;break;}
         if(!alive) break;
@@ -185,7 +185,6 @@ void time_loop(size_t ws, pstate **tl) {
 
         /* Snapshot of existing pending */
         for(size_t k=0;k<pq_sz;k++) cands[nc++]=pq[k];
-        size_t n_existing = nc;
 
         /* New arrivals sorted among themselves: prio DESC, higher pid first */
         size_t newp[256]; size_t nn=0;
@@ -214,9 +213,8 @@ void time_loop(size_t ws, pstate **tl) {
             /* skip if not current (not yet started or already done) */
             if(workload[pid].ts > t || workload[pid].tf < t) continue;
             /* if in pq, remove it before trying */
-            bool was_in_pq=false;
             for(size_t j=0;j<pq_sz;j++) {
-                if(pq[j]==pid) { pq_remove_at(j); was_in_pq=true; break; }
+                if(pq[j]==pid) { pq_remove_at(j); break; }
             }
             bool ok=try_schedule(pid);
             if(!ok) pq_add(pid);
@@ -279,7 +277,7 @@ int main(int argc, char **argv) {
     printf("* Loaded %zu lines of data.\n",ws);
     printf("* starting scheduling on 1 CPUs\n");
     pstate **tl=alloc_timeline(END_STEP,ws);
-    if(ws>0) time_loop(ws,tl);
+    if(ws>0) time_loop(ws, 0, END_STEP, MAX_CPU, tl);
     else { free(workload); return EXIT_FAILURE; }
     printf("* Chronogram === \n");
     chronogram(workload,ws,END_STEP);
