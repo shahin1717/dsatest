@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <limits.h>
 #include "sched.h"
@@ -12,156 +12,80 @@
 #define END_STEP 29
 #define MAX_SIM  500
 
-
 struct workload_item_t {
-	int pid;       //< the event id
-    int ppid;      //< the event parent id
-	size_t ts;     //< start date
-	size_t tf;     //< finish date
-	size_t idle;   //< total time the process has been idle;
-	char *cmd;     //< the binary name
-	int prio;      //< process priority
+    int pid, ppid;
+    size_t ts, tf, idle;
+    char *cmd;
+    int prio;
 };
 
-enum  epoch { before, in, after };  //< to compare a date and a timeframe 
+enum epoch { before, in, after };
 typedef enum epoch epoch;
 
-
-   /**
-    *            0,init
-    *         /           \
-	*      1,bash          2,bash
-	*     /   \   \        /      \ 
-	* 3,find   \   \      |       |
-	*         4,gcc \     |       |
-	*            |   |    |       |
-	*	       5,ld  |    |       | 
-	*                |    6,ssh   |
-	*                |    |       |
-	*                |    7,crypt |
-	*                |           8,snake
-    *               9,cat
-    */
-
-   /*
-	workload_item workload[] = {
-	//  pid ppid  ts  tf idle  cmd     prio
-	    {0, -1,    0, 18,  0, "init",  10 },
-        {1,  0,    1, 16,  0, "bash",   1 },
-        {2,  0,    3, 16,  0, "bash",   1 },
-        {3,  1,    4,  6,  0, "find",   2 },
-        {4,  1,    7,  9,  0, "gcc",    5 },
-		{5,  4,    8,  9,  0, "ld",     4 }, 
-		{6,  2,   10, 13,  0, "ssh",    3 },
-        {7,  6,   11, 13,  0, "crypt",  5 },
-        {8,  2,   14, 16,  0, "snake",  4 },
-        {9,  1,   14, 15,  0, "cat",    5 },
-	};
-	*/
 void draw_hbar(char c, size_t width) {
-	char bar[width+1];
-	memset(bar, c, width);
-	bar[width]='\0';
-	printf("%s",bar);
+    char bar[width+1]; memset(bar,c,width); bar[width]='\0'; printf("%s",bar);
 }
 
-void chronogram(workload_item* workload, size_t nb_processes, size_t timesteps) {
-	// drw timeliine
-	size_t tick;
-	size_t freq=5;
-	printf("\t");
-	for (tick=0; tick<timesteps; tick++) {
-		if (tick%freq==0) printf("|"); else printf(".");
-	}
-	printf("\n");
-	// draw processes lifetime
-	for (size_t i=0; i<nb_processes; i++) {
-		printf("%s\t", workload[i].cmd);
-		draw_hbar(' ',workload[i].ts);
-		draw_hbar('X',workload[i].tf-workload[i].ts);
-		printf("\t\t\t (tf=%zu,idle=%zu)\n", workload[i].tf, workload[i].idle);
-	}
+void chronogram(workload_item *w, size_t nb, size_t steps) {
+    printf("\t");
+    for(size_t t=0;t<steps;t++) printf(t%5==0?"|":".");
+    printf("\n");
+    for(size_t i=0;i<nb;i++) {
+        printf("%s\t",w[i].cmd);
+        draw_hbar(' ',w[i].ts);
+        draw_hbar('X',w[i].tf-w[i].ts);
+        printf("\t\t\t (tf=%zu,idle=%zu)\n",w[i].tf,w[i].idle);
+    }
 }
 
-
-/**
- * @brief count lines in file
- * 
- * @param file assumed to be an open file
- * @return the number of lines in files 
- */
 size_t count_lines_in_file(FILE *file) {
-    int lines = 0;
-    char ch;
-    // Count the number of newline characters
-    while ((ch = fgetc(file)) != EOF) {
-        if (ch == '\n') {
-            lines++;
-        }
-    }
-    // If the file is not empty and the last line doesn't end with '\n'
-    if (ch != '\n' && lines != 0) {
-        lines++;
-    }
-    rewind(file);
-    return lines;
+    int lines=0; char ch;
+    while((ch=fgetc(file))!=EOF) if(ch=='\n') lines++;
+    if(ch!='\n'&&lines!=0) lines++;
+    rewind(file); return lines;
 }
 
-/**
- * @brief Read the workload data
- * 
- * @param filename the name of file, can be STDIN
- * @return number of data lines read in the file
- */
 size_t read_data(size_t workload_size, FILE *file) {
-    size_t count = 0;
-    char line[256];  // Buffer for each line in the file
-    char cmd[50];    // Buffer for command name
-
-    while (fgets(line, sizeof(line), file) && count < workload_size) {
+    size_t count=0; char line[256], cmd[50];
+    while(fgets(line,sizeof(line),file)&&count<workload_size) {
         workload_item item;
-        // Parse the line into the workload_item structure
-        if (sscanf(line, "%d %d %zu %zu %zu %s %d",
-                   &item.pid, &item.ppid, &item.ts, &item.tf,
-                   &item.idle, cmd, &item.prio) == 7) {
-            item.cmd = strdup(cmd);  // Duplicate the string for command name
-            workload[count++] = item;
-        } else {
-            fprintf(stderr, "Error parsing line: %s\n", line);
-			return false;
-        }
-	}
-	return count;
+        if(sscanf(line,"%d %d %zu %zu %zu %s %d",
+            &item.pid,&item.ppid,&item.ts,&item.tf,&item.idle,cmd,&item.prio)==7) {
+            item.cmd=strdup(cmd); workload[count++]=item;
+        } else { fprintf(stderr,"Error parsing line: %s\n",line); return 0; }
+    }
+    return count;
 }
-/* --- Run queue --- */
+
+/* ================================================================
+ * Run queue
+ * ================================================================ */
 static size_t runq[256]; static size_t rq_sz=0; static int cpu_load=0;
- 
-static int min_runner(void) { /* returns index of lowest prio in runq, or -1 */
+
+/* Evict lowest-prio runner; tie: higher pid first */
+static int min_runner(void) {
     if(!rq_sz) return -1;
     int m=0;
     for(size_t i=1;i<rq_sz;i++) {
         int pi=workload[runq[i]].prio, pm=workload[runq[m]].prio;
-        if(pi < pm) m=i;
-        else if(pi == pm && runq[i] > runq[m]) m=i; /* tie: evict higher pid */
+        if(pi<pm) m=i;
+        else if(pi==pm && runq[i]>runq[m]) m=i;
     }
     return m;
 }
 static void rem_runner(int idx) {
-    cpu_load-=workload[runq[idx]].prio;
-    runq[idx]=runq[--rq_sz];
+    cpu_load -= workload[runq[idx]].prio;
+    runq[idx] = runq[--rq_sz];
 }
-static void add_runner(size_t pid) { runq[rq_sz++]=pid; cpu_load+=workload[pid].prio; }
- 
-static int cmp_pd(const void *a,const void *b) {
-    size_t ia=*(size_t*)a,ib=*(size_t*)b;
-    int d=workload[ib].prio-workload[ia].prio;
-    if(d) return d;
-    return (int)ib-(int)ia; /* tie: higher pid first */
+static void add_runner(size_t pid) {
+    runq[rq_sz++]=pid; cpu_load+=workload[pid].prio;
 }
- 
-/* --- Pending queue as a set (no duplicates) --- */
+
+/* ================================================================
+ * Pending queue — insertion-ordered set (no duplicates)
+ * ================================================================ */
 static size_t pq[512]; static size_t pq_sz=0;
- 
+
 static bool pq_contains(size_t pid) {
     for(size_t i=0;i<pq_sz;i++) if(pq[i]==pid) return true;
     return false;
@@ -170,13 +94,25 @@ static void pq_add(size_t pid) {
     if(!pq_contains(pid)) pq[pq_sz++]=pid;
 }
 static void pq_remove_at(size_t idx) { pq[idx]=pq[--pq_sz]; }
- 
-/*
- * try_schedule: attempt to put pid into run queue.
- * While it doesn't fit, evict the lowest-prio runner (if new prio > runner prio).
- * Evicted pids are added to pq (pending set) directly.
- * Returns true if pid was added to run queue.
- */
+
+/* ================================================================
+ * Stable insertion sort by prio DESC.
+ * Equal-priority elements preserve their original relative order.
+ * ================================================================ */
+static void stable_sort_prio_desc(size_t *arr, size_t n) {
+    for(size_t i=1;i<n;i++) {
+        size_t key=arr[i]; int j=(int)i-1;
+        while(j>=0 && workload[arr[j]].prio < workload[key].prio) {
+            arr[j+1]=arr[j]; j--;
+        }
+        arr[j+1]=key;
+    }
+}
+
+/* ================================================================
+ * Try to schedule one process.
+ * Evicted go to pq (appended at end).
+ * ================================================================ */
 static bool try_schedule(size_t pid) {
     int p=workload[pid].prio;
     printf("> schedule pid=%zu prio=%d ('%s') ",pid,p,workload[pid].cmd);
@@ -194,30 +130,44 @@ static bool try_schedule(size_t pid) {
             ep,workload[ep].prio,workload[ep].cmd);
         rem_runner(m);
         printf("> CPU occupation: CPU[0]=%d \n",cpu_load);
-        pq_add(ep); /* evicted -> pending (will be processed next round) */
+        pq_add(ep);
     }
     add_runner(pid);
     printf(" added to running queue\n");
     printf("> CPU occupation: CPU[0]=%d \n",cpu_load);
     return true;
 }
- 
+
+/* ================================================================
+ * Main loop
+ *
+ * Each round:
+ *  1. Remove finished processes
+ *  2. Build candidate list: existing pending (in insertion order)
+ *     + new arrivals (appended after pending, sorted by prio DESC
+ *     with higher-pid tiebreak among themselves)
+ *  3. Stable-sort entire candidate list by prio DESC
+ *     (pending keeps relative order; equal-prio new arrivals go
+ *      after equal-prio pending since appended after)
+ *  4. Process candidates one by one: try_schedule each
+ *     (evicted processes go to pq but are NOT in this round's list)
+ *  5. Idle penalty
+ * ================================================================ */
 void time_loop(size_t ws, pstate **tl) {
     rq_sz=0; cpu_load=0; pq_sz=0;
- 
+
     for(size_t i=0;i<ws;i++)
         for(size_t t=0;t<END_STEP;t++)
             tl[i][t]=pending;
- 
-    for(size_t t=0;t<MAX_SIM;t++) {
-        /* stop when nothing left */
+
+    for(size_t t=0; t<MAX_SIM; t++) {
         int alive=0;
         for(size_t i=0;i<ws;i++) if(t<=workload[i].tf){alive=1;break;}
         if(!alive) break;
- 
+
         printf("[t=%zu]\n",t);
- 
-        /* 1. Remove finished processes */
+
+        /* 1. Remove finished */
         for(int i=(int)rq_sz-1;i>=0;i--) {
             size_t pid=runq[i];
             if(workload[pid].tf < t) {
@@ -227,76 +177,93 @@ void time_loop(size_t ws, pstate **tl) {
                 printf("> CPU occupation: CPU[0]=%d \n",cpu_load);
             }
         }
- 
-        /* 2. Take snapshot of pending queue BEFORE processing new arrivals.
-              Step 3 will only retry these pids (not ones evicted during step 2). */
-        size_t snap[512]; size_t snap_sz=pq_sz;
-        for(size_t k=0;k<pq_sz;k++) snap[k]=pq[k];
-        qsort(snap,snap_sz,sizeof(size_t),cmp_pd);
- 
-        /* Schedule NEW arrivals (ts==t), sorted prio desc.
-           Evicted go to pq but are NOT retried this round (not in snapshot). */
+
+        /* 2. Build candidate list:
+              First: existing pending in insertion order (snapshot)
+              Then:  new arrivals sorted prio DESC / higher-pid first */
+        size_t cands[512]; size_t nc=0;
+
+        /* Snapshot of existing pending */
+        for(size_t k=0;k<pq_sz;k++) cands[nc++]=pq[k];
+        size_t n_existing = nc;
+
+        /* New arrivals sorted among themselves: prio DESC, higher pid first */
         size_t newp[256]; size_t nn=0;
         for(size_t i=0;i<ws;i++) if(workload[i].ts==t) newp[nn++]=i;
-        qsort(newp,nn,sizeof(size_t),cmp_pd);
-        for(size_t k=0;k<nn;k++) {
-            bool ok=try_schedule(newp[k]);
-            if(!ok) pq_add(newp[k]);
+        /* sort new arrivals: prio desc, higher pid first */
+        for(size_t i=1;i<nn;i++) {
+            size_t key=newp[i]; int j=(int)i-1;
+            while(j>=0) {
+                int pa=workload[newp[j]].prio, pb=workload[key].prio;
+                if(pa > pb) break;
+                if(pa == pb && newp[j] > key) break; /* higher pid first */
+                newp[j+1]=newp[j]; j--;
+            }
+            newp[j+1]=key;
         }
- 
-        /* 3. Schedule EXISTING pending (snapshot from before step 2).
-              Evicted during this phase also skip this loop. */
- 
-        for(size_t k=0;k<snap_sz;k++) {
-            size_t pid=snap[k];
-            /* skip if no longer in pq (could have been evicted out and re-added,
-               but with set semantics it's fine - just check it's still current) */
-            if(!pq_contains(pid)) continue;
-            if(workload[pid].ts>t || workload[pid].tf<t) continue;
-            /* remove from pq before trying */
+        for(size_t k=0;k<nn;k++) cands[nc++]=newp[k];
+
+        /* 3. Stable-sort entire candidate list by prio DESC.
+              Existing pending keeps relative order; new arrivals
+              (appended after) stay after equal-prio pending. */
+        stable_sort_prio_desc(cands, nc);
+
+        /* 4. Process candidates: remove from pq if present, try schedule */
+        for(size_t k=0;k<nc;k++) {
+            size_t pid=cands[k];
+            /* skip if not current (not yet started or already done) */
+            if(workload[pid].ts > t || workload[pid].tf < t) continue;
+            /* if in pq, remove it before trying */
+            bool was_in_pq=false;
             for(size_t j=0;j<pq_sz;j++) {
-                if(pq[j]==pid) { pq_remove_at(j); break; }
+                if(pq[j]==pid) { pq_remove_at(j); was_in_pq=true; break; }
             }
             bool ok=try_schedule(pid);
-            if(!ok) pq_add(pid); /* back to pq if failed */
-            /* if ok: evicted ones were added to pq inside try_schedule */
+            if(!ok) pq_add(pid);
+            /* evicted processes were added to pq inside try_schedule */
         }
- 
-        /* 4. Idle penalty */
+
+        /* 5. Idle penalty */
         for(size_t k=0;k<pq_sz;k++) {
             size_t pid=pq[k];
             if(workload[pid].ts<=t && t<=workload[pid].tf) {
-                workload[pid].idle++; workload[pid].tf++;
+                workload[pid].idle++;
+                workload[pid].tf++;
             }
         }
- 
-        /* 5. Print queues */
+
+        /* 6. Print queues */
         size_t disp[256];
         for(size_t i=0;i<rq_sz;i++) disp[i]=runq[i];
-        qsort(disp,rq_sz,sizeof(size_t),cmp_pd);
+        /* sort runq for display: prio desc, higher pid first */
+        for(size_t i=1;i<rq_sz;i++) {
+            size_t key=disp[i]; int j=(int)i-1;
+            while(j>=0) {
+                int pa=workload[disp[j]].prio,pb=workload[key].prio;
+                if(pa>pb) break;
+                if(pa==pb && disp[j]>key) break;
+                disp[j+1]=disp[j]; j--;
+            }
+            disp[j+1]=key;
+        }
         printf("> running: [");
         for(size_t i=0;i<rq_sz;i++) printf("(%d,%zu) ",workload[disp[i]].prio,disp[i]);
         printf("]\n> pending: [");
-        /* sort pq for display */
-        size_t pdisp[512];
-        for(size_t i=0;i<pq_sz;i++) pdisp[i]=pq[i];
-        qsort(pdisp,pq_sz,sizeof(size_t),cmp_pd);
-        for(size_t k=0;k<pq_sz;k++) printf("(%d,%zu) ",workload[pdisp[k]].prio,pdisp[k]);
+        for(size_t k=0;k<pq_sz;k++) printf("(%d,%zu) ",workload[pq[k]].prio,pq[k]);
         printf("]\n");
- 
-        /* 6. Record timeline */
+
+        /* 7. Record timeline */
         if(t<END_STEP)
             for(size_t i=0;i<rq_sz;i++) tl[runq[i]][t]=running;
     }
- 
-    /* post-pass: inactive after final tf */
+
     for(size_t i=0;i<ws;i++) {
         size_t end=workload[i].tf+1;
         if(end>END_STEP) end=END_STEP;
         for(size_t t=end;t<END_STEP;t++) tl[i][t]=inactive;
     }
 }
- 
+
 int main(int argc, char **argv) {
     FILE *input;
     if(argc>1) {

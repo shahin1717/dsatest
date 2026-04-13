@@ -68,7 +68,7 @@
  added to running queue
 > CPU occupation: CPU[0]=20 
 > running: [(10,0) (5,7) (5,4) ]
-> pending: [(3,6) (1,2) (1,1) ]
+> pending: [(1,2) (1,1) (3,6) ]
 [t=12]
 > process pid=4 prio=5 ('gcc') finished after time t=11
 > CPU occupation: CPU[0]=15 
@@ -97,7 +97,7 @@
  added to running queue
 > CPU occupation: CPU[0]=19 
 > running: [(10,0) (5,9) (4,8) ]
-> pending: [(3,6) (1,2) (1,1) ]
+> pending: [(1,2) (1,1) (3,6) ]
 [t=15]
 > schedule pid=6 prio=3 ('ssh') ...can't fit. Pick process to put asleep: None, as min prio: pid=8 prio=4 ('snake') has greater or equal priority
 > CPU occupation: CPU[0]=19 
